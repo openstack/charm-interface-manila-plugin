@@ -21,25 +21,25 @@ import charms.reactive as reactive
 class ManilaPluginRequires(reactive.RelationBase):
     """The is the Manila 'end' of the relation.
 
-    The auto accessors are underscored as for some reason RelationBase only
-    provides these as 'calls'; i.e. they have to be used as `self._name()`.
-    This class therefore provides @properties `name` and `plugin_data` that can
-    be used directly.
+    The auto accessors are underscored as RelationBase only provides these as
+    'calls'; i.e. they have to be used as `self._name()`.  This class therefore
+    provides @properties `name` and `plugin_data` that can be used directly.
 
     This side of the interface sends the manila service user authentication
     information to the plugin charm (which is a subordinate) and gets
     configuration segments for the various files that the manila charm 'owns'
     and, therefore, writes out.
-
-    The most important property is the 'ready' property which indicates that
-    the configuration data on the interface is valid and thus can be written to
-    the configuration files by the manila charm.
     """
     scope = reactive.scopes.UNIT
 
     # These remote data fields will be automatically mapped to accessors
     # with a basic documentation string provided.
     auto_accessors = ['_name', '_configuration_data']
+
+    class states(reactive.bus.StateList):
+        connected = reactive.bus.State('{relation_name}.connected')
+        available = reactive.bus.State('{relation_name}.available')
+        changed = reactive.bus.State('{relation_name}.changed')
 
     @reactive.hook('{requires:manila-plugin}-relation-joined')
     def joined(self):
@@ -48,7 +48,8 @@ class ManilaPluginRequires(reactive.RelationBase):
 
         We also update the status, as this may or may not be another plugin.
         """
-        self.set_state('{relation_name}.connected')
+        conversation = self.conversation()
+        conversation.set_state(self.states.connected)
         self.update_status()
 
     @reactive.hook('{requires:manila-plugin}-relation-changed')
@@ -89,7 +90,7 @@ class ManilaPluginRequires(reactive.RelationBase):
             count_conversations += 1
             # try to see if we've already had this conversation
             conversation_available = self.get_local(
-                '_available', default=None, scope=conversation.scope)
+                '_available', default=False, scope=conversation.scope)
             name = self.get_remote(
                 '_name', default=None, scope=conversation.scope)
             configuration_data = self.get_remote(
@@ -108,18 +109,19 @@ class ManilaPluginRequires(reactive.RelationBase):
 
         # now update the relation states to convey what is happening.
         if count_changed:
-            self.set_state('{relation_name}.changed')
+            self.set_state(self.states.changed)
         if count_available:
-            self.set_state('{relation_name}.available')
+            self.set_state(self.states.available)
         else:
-            self.remove_state('{relation_name}.available')
+            self.remove_state(self.states.available)
         if not count_conversations:
-            self.remove_state('{relation_name}.connected')
-            self.remove_state('{relation_name}.changed')
+            self.remove_state(self.states.connected)
+            self.remove_state(self.states.changed)
 
     def clear_changed(self):
         """Provide a convenient method to clear the .changed relation"""
-        self.remove_state('{relation_name}.changed')
+        conversation = self.conversation()
+        conversation.remove_state(self.states.changed)
 
     def set_authentication_data(self, value, name=None):
         """Set the authentication data to the plugin charm.  This is to enable
@@ -201,35 +203,60 @@ class ManilaPluginRequires(reactive.RelationBase):
     def get_configuration_data(self, name=None):
         """Return the configuration_data from the plugin if it is available.
 
-        The format of the data returned is:
-        {
-            '<config file>': {
-                '<section>: (
-                    (key, value),
-                    (key, value),
-                    "or string",
-            )
-        }
-
-        if 'name' is provided, then only the configuration data for that name
+        If 'name' is provided, then only the configuration data for that name
         is returned, otherwise all of the configuration data for all
         conversations is returned as an amalgamated dict.
 
+        Note, that multiple backends are supported through this one interface.
+        so this function needs to potentially return all of the results for all
+        of the backends, which also may be wanting to write configuration to
+        the same configuration file.
+
+        This is for the files that the manila charm owns.  If a configuration
+        charm has its own files, not managed by the manila charm, then it
+        doesn't (and shouldn't) send them over this interface -- it should just
+        write them locally.
+
+        Each backend sends it's data in the following format:
+
+        {
+            "<config file path>": <string>,
+            "<config file path 2>": <string>
+        }
+
+        This function amalgamates the data from multiple backends by using the
+        name of the backend as the key to a dictionary:
+
+        {
+            "<name1>": {
+                "<config file path>": <string>,
+                "<config file path 2>": <string>
+            },
+            "<name2>": {
+                "<config file path>": <string>,
+            },
+        }
+
+        NOTE: this function will only return results if the subordinate sets
+        the _name parameter.  Otherwise, it will not return anything.
+
         :param name: OPTIONAL: specify the name of the interface (_name)
-        :returns: data object that was passed.
+        :returns: data object described above
         """
         result = {}
         for conversation in self.conversations():
             if conversation.scope is None:
                 # the conversation has gone away; ignore it
                 continue
-            if name:
-                _name = self.get_remote('_name', default=None,
-                                        scope=conversation.scope)
-                if _name != name:
-                    continue
-            config = self.get_remote('_configuration_data', default=None,
+            _name = self.get_remote('_name', default=None,
+                                    scope=conversation.scope)
+            # if name is not None then check to see if this is the one that is
+            # wanted.
+            if name and _name != name:
+                continue
+            config = self.get_remote('_configuration_data',
+                                     default=None,
                                      scope=conversation.scope)
-            if config:
-                result.update(json.loads(config)["data"])
+            if _name and config:
+                result[_name] = json.loads(config)["data"]
         return result

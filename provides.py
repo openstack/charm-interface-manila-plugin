@@ -36,9 +36,15 @@ class ManilaPluginProvides(reactive.RelationBase):
     # with a basic documentation string provided.
     auto_accessors = ['_authentication_data']
 
+    class states(reactive.bus.StateList):
+        connected = reactive.bus.State('{relation_name}.connected')
+        available = reactive.bus.State('{relation_name}.available')
+        changed = reactive.bus.State('{relation_name}.changed')
+
     @reactive.hook('{provides:manila-plugin}-relation-joined')
     def joined(self):
-        self.set_state('{relation_name}.connected')
+        conversation = self.conversation()
+        conversation.set_state(self.states.connected)
         self.update_status()
 
     @reactive.hook('{provides:manila-plugin}-relation-changed')
@@ -54,9 +60,10 @@ class ManilaPluginProvides(reactive.RelationBase):
 
     @reactive.hook('{provides:manila-plugin}-relation-{broken,departed}')
     def departed(self):
-        self.remove_state('{relation_name}.changed')
-        self.remove_state('{relation_name}.available')
-        self.remove_state('{relation_name}.connected')
+        conversation = self.conversation()
+        conversation.remove_state(self.states.connected)
+        conversation.remove_state(self.states.available)
+        conversation.remove_state(self.states.changed)
 
     def update_status(self):
         """Set the .available and .changed state if both the plugin name and
@@ -68,15 +75,26 @@ class ManilaPluginProvides(reactive.RelationBase):
         configuration files as needed.
 
         The interface will NOT set .changed without having .available at the
-        same time.
+        same time.  Also, the interface will not set .changed unless the
+        authentication data has changed.
         """
-        if self._authentication_data() is not None:
-            self.set_state('{relation_name}.available')
-            self.set_state('{relation_name}.changed')
+        auth_data = self._authentication_data()
+        conversation = self.conversation()
+        if auth_data is not None:
+            conversation.set_state(self.states.available)
+            scope = conversation.scope
+            local_auth_data = self.get_local('_authentication_data',
+                                             default=None,
+                                             scope=scope)
+            if (local_auth_data is None or local_auth_data != auth_data):
+                conversation.set_state(self.states.changed)
+                conversation.set_local(_authentication_data=auth_data,
+                                       scope=scope)
 
     def clear_changed(self):
         """Provide a convenient method to clear the .changed relation"""
-        self.remove_state('{relation_name}.changed')
+        conversation = self.conversation()
+        conversation.remove_state(self.states.changed)
 
     @property
     def name(self):
@@ -148,12 +166,11 @@ class ManilaPluginProvides(reactive.RelationBase):
         The format of the data is:
         {
             "complete": <boolean>,
-            '<config file>': {
-                '<section>: (
-                    (key, value),
-                    (key, value),
-            )
+            '<config file>': ""
         }
+
+        Note that the string for the <config file> should be suitable for
+        replacing/adding into the configuration file specified.
 
         Thus data has to be JSONable.
 
