@@ -93,8 +93,12 @@ class ManilaPluginProvides(reactive.RelationBase):
 
     def clear_changed(self):
         """Provide a convenient method to clear the .changed relation"""
-        conversation = self.conversation()
-        conversation.remove_state(self.states.changed)
+        try:
+            self.remove_state(self.states.changed)
+        except ValueError:
+            # work around Juju 1.25.x error where it can't find the scope for
+            # the interface (randomly) - Bug #1663633
+            pass
 
     @property
     def name(self):

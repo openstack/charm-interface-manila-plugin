@@ -120,8 +120,12 @@ class ManilaPluginRequires(reactive.RelationBase):
 
     def clear_changed(self):
         """Provide a convenient method to clear the .changed relation"""
-        conversation = self.conversation()
-        conversation.remove_state(self.states.changed)
+        try:
+            self.remove_state(self.states.changed)
+        except ValueError:
+            # this works around a Juju 1.25.x bug where it can't find the right
+            # scoped conversation - Bug #1663633
+            pass
 
     def set_authentication_data(self, value, name=None):
         """Set the authentication data to the plugin charm.  This is to enable
