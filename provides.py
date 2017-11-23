@@ -36,10 +36,10 @@ class ManilaPluginProvides(reactive.RelationBase):
     # with a basic documentation string provided.
     auto_accessors = ['_authentication_data']
 
-    class states(reactive.bus.StateList):
-        connected = reactive.bus.State('{relation_name}.connected')
-        available = reactive.bus.State('{relation_name}.available')
-        changed = reactive.bus.State('{relation_name}.changed')
+    class states():
+        connected = '{relation_name}.connected'
+        available = '{relation_name}.available'
+        changed = '{relation_name}.changed'
 
     @reactive.hook('{provides:manila-plugin}-relation-joined')
     def joined(self):
