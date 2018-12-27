@@ -10,7 +10,7 @@ own backend configuration charms as the project continues.
 # Manila usage
 
 This interface is used between the Manila charm (share backend role or all) to
-provide the manila service user auth details to backend configuraiton charms,
+provide the manila service user auth details to backend configuration charms,
 and to obtain configuration information that needs to be written into 8
 No explicit handler is required to consume this interface in charms
 that consume this interface.
