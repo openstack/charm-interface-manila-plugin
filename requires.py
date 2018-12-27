@@ -130,7 +130,7 @@ class ManilaPluginRequires(reactive.RelationBase):
     def set_authentication_data(self, value, name=None):
         """Set the authentication data to the plugin charm.  This is to enable
         the plugin to either 'talk' to OpenStack or to provide authentication
-        data into the configuraiton sections that it needs to set (the generic
+        data into the configuration sections that it needs to set (the generic
         backend needs to do this).
 
         The authentication data format is:
