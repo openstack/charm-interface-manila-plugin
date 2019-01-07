@@ -1,7 +1,7 @@
 # Overview
 
 This interface provides a mechanism for 'plugins' to the the Manila charm to
-provide configuration sections/parts to to the Manila charm.
+provide configuration sections/parts to the Manila charm.
 
 It is intended to be used to enable manila share backends to be configured
 independently of the main charm, so that vendors/maintainers can supply their
